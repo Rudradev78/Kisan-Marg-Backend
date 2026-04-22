@@ -1,31 +1,39 @@
 {
   "name": "kisan-marg-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Backend server for Kisan Marg - Connecting Farmers and Buyers",
+  "main": "src/server.js",
   "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Rudradev78/Kisan-Marg-Backend.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "kisan-marg",
+    "agriculture",
+    "mern",
+    "backend"
+  ],
+  "author": "Rudradev",
   "license": "ISC",
   "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/Rudradev78/Kisan-Marg-Backend/issues"
-  },
-  "homepage": "https://github.com/Rudradev78/Kisan-Marg-Backend#readme",
   "dependencies": {
+    "axios": "^1.15.2",
+    "cloudinary": "^2.9.0",
     "colors": "^1.4.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.4.1",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "multer": "^2.1.1",
+    "streamifier": "^0.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
