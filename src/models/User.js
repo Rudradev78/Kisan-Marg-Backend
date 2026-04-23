@@ -2,9 +2,10 @@ const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true }, 
-  phno: { type: String, required: true, unique: true }, 
+  // REMOVED unique: true from phno
+  phno: { type: String, required: true }, 
   email: { type: String }, 
-  aadhar: { type: String }, // Optional for Farmers [cite: 5]
+  aadhar: { type: String }, // Redacted digits for privacy in production
   dpImageURL: { type: String }, 
   userType: { type: String, enum: ['Farmer', 'Buyer', 'Admin'], required: true }, 
   location: { type: String },
@@ -24,5 +25,12 @@ const UserSchema = new mongoose.Schema({
   otpChances: { type: Number, default: 5 }, 
   lockUntil: Date 
 }, { timestamps: true }); 
+
+/**
+ * COMPOUND INDEX
+ * This allows one number to have multiple accounts (one as Farmer, one as Buyer)
+ * but prevents two 'Buyer' accounts with the same number.
+ */
+UserSchema.index({ phno: 1, userType: 1 }, { unique: true });
 
 module.exports = mongoose.model('User', UserSchema);
