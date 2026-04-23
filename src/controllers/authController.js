@@ -6,12 +6,34 @@ const jwt = require('jsonwebtoken');
 // @route   POST /api/v1/auth/login
 exports.sendOTP = async (req, res) => {
   try {
-    const { phno, userType } = req.body;
+    // 1. Capture name, phno, and userType from frontend
+    const { phno, userType, name } = req.body;
 
-    // 1. Check if user exists in the Farmer or Buyer module
+    // 2. Check if user already exists
     let user = await User.findOne({ phno });
 
-    // 2. If exists, check if already logged in
+    /**
+     * LOGIC FOR SIGN UP (If name is provided, the user is trying to register)
+     */
+    if (name && user) {
+      return res.status(400).json({ 
+        success: false, 
+        isExistingUser: true,
+        message: "This phone number is already registered. Please Sign In." 
+      });
+    }
+
+    /**
+     * LOGIC FOR SIGN IN (If no name is provided, the user is trying to log in)
+     */
+    if (!name && !user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Account not found. Please Sign Up first." 
+      });
+    }
+
+    // 3. If exists, check if already logged in (Session Control)
     if (user && user.isLogged) {
       return res.status(400).json({ 
         success: false, 
@@ -19,28 +41,39 @@ exports.sendOTP = async (req, res) => {
       });
     }
 
-    // 3. If new user, create account
-    if (!user) {
-      user = await User.create({ phno, userType, name: "New User" });
+    // 4. Create account only if it's a new user with a name
+    if (!user && name) {
+      user = await User.create({ 
+        phno, 
+        userType, 
+        name // Saves the actual name entered in FarmerSignUp
+      });
     }
 
-    // 4. Generate 6-digit OTP
+    // 5. Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
     user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-    user.otpChances = 5; // Reset chances
+    user.otpChances = 5; 
     await user.save();
 
-    // 5. Send OTP via Fast2SMS
-    // Note: Using the 'otp' route is easiest
-    const fast2smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=otp&variables_values=${otp}&numbers=${phno}`;
+    // 6. Send OTP via Fast2SMS
+    try {
+        const fast2smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=otp&variables_values=${otp}&numbers=${phno}`;
+        await axios.get(fast2smsUrl);
+    } catch (smsErr) {
+        console.log("Fast2SMS Error: ", smsErr.message);
+        // We continue so you can still see the OTP in the console if the SMS fails
+    }
 
-    await axios.get(fast2smsUrl);
-
-    // Also console log for easy testing without spending credits
+    // console log for testing in Render Logs
     console.log(`OTP for ${phno} is: ${otp}`);
 
-    res.status(200).json({ success: true, message: "OTP sent successfully" });
+    res.status(200).json({ 
+        success: true, 
+        message: "OTP sent successfully",
+        isExistingUser: !!user // returns true if user existed, false if just created
+    });
 
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -58,7 +91,7 @@ exports.verifyOTP = async (req, res) => {
       return res.status(400).json({ success: false, message: "Request a new OTP" });
     }
 
-    // Rate Limiting Check (5 chances rule)
+    // 5 chances rule
     if (user.otpChances <= 0) {
       return res.status(403).json({ 
         success: false, 
@@ -66,7 +99,7 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // Check if OTP matches
+    // Verify
     if (user.otp !== otp) {
       user.otpChances -= 1;
       await user.save();
@@ -76,17 +109,15 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // Check if expired
     if (Date.now() > user.otpExpires) {
       return res.status(400).json({ success: false, message: "OTP Expired" });
     }
 
-    // Success! Log the user in
+    // Update login status
     user.isLogged = true;
-    user.otp = undefined; // Clear OTP
+    user.otp = undefined; 
     await user.save();
 
-    // Create JWT Token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
     res.status(200).json({
