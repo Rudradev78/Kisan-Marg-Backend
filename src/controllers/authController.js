@@ -8,14 +8,9 @@ exports.sendOTP = async (req, res) => {
   try {
     const { phno, userType, name, location } = req.body;
 
-    // 1. Search for user by BOTH phone and role
     let user = await User.findOne({ phno, userType });
 
-    /**
-     * CASE A: SIGN UP INTENT (Name is provided)
-     */
     if (name) {
-      // Block only if the account is ALREADY verified/active
       if (user && user.isLogged) {
         return res.status(400).json({ 
           success: false, 
@@ -24,65 +19,42 @@ exports.sendOTP = async (req, res) => {
         });
       }
       
-      // If user doesn't exist, create a "pending" record
       if (!user) {
         user = new User({ 
           phno, 
           userType, 
           name,
           location: location || "Not Provided",
-          isLogged: false // Account remains "pending" until verifyOTP
+          isLogged: false 
         });
       } else {
-        // Retry logic: Update name/location for the unverified record
         user.name = name;
         user.location = location || user.location;
       }
     }
 
-    /**
-     * CASE B: SIGN IN INTENT (No name provided)
-     */
-    if (!name) {
-      if (!user) {
-        return res.status(404).json({ 
-          success: false, 
-          message: `No ${userType} account found with this number.` 
-        });
-      }
-
-      // Block sign-in if they never finished the OTP step during Sign Up
-      if (!user.isLogged) {
-        return res.status(401).json({
-          success: false,
-          message: "Registration incomplete. Please use the Sign Up page to verify."
-        });
-      }
+    if (!name && !user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: `No ${userType} account found with this number.` 
+      });
     }
 
-    // 2. Generate/Refresh 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
-    user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.otpExpires = Date.now() + 10 * 60 * 1000;
     user.otpChances = 5; 
     
-    // Save the record (Triggers Mongoose validation)
     await user.save();
 
-    // 3. Send OTP via Fast2SMS (Non-blocking)
     const fast2smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=otp&variables_values=${otp}&numbers=${phno}`;
 
     axios.get(fast2smsUrl)
-      .then(() => console.log(`✔ Fast2SMS [${userType}] OTP sent to ${phno}`))
-      .catch(err => {
-        console.log(`❌ Fast2SMS Gateway Error:`, err.response?.data?.message || err.message);
-      });
+      .then(() => console.log(`✔ OTP sent to ${phno}`))
+      .catch(err => console.log(`❌ Gateway Error:`, err.message));
 
-    // 4. THE BYPASS: High-Visibility Log for Render
     console.log(`\n==========================================`);
-    console.log(`🚀 KISAN MARG [${userType}] OTP BYPASS`);
-    console.log(`USER: ${user.name} | PHONE: ${phno}`);
-    console.log(`CODE: ${otp} | VERIFIED: ${user.isLogged}`);
+    console.log(`🚀 KISAN MARG [${userType}] OTP BYPASS: ${otp}`);
     console.log(`==========================================\n`);
 
     res.status(200).json({ 
@@ -92,8 +64,7 @@ exports.sendOTP = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Auth Controller Error:", error);
-    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -102,62 +73,55 @@ exports.sendOTP = async (req, res) => {
 exports.verifyOTP = async (req, res) => {
   try {
     const { phno, otp, userType } = req.body;
-
     const user = await User.findOne({ phno, userType });
 
     if (!user || !user.otp) {
-      return res.status(400).json({ success: false, message: "No active OTP found. Please resend." });
+      return res.status(400).json({ success: false, message: "No active OTP found." });
     }
 
-    // 5 Chances Rule
     if (user.otpChances <= 0) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "Account locked due to too many attempts. Please try again later." 
-      });
+      return res.status(403).json({ success: false, message: "Account locked. Try later." });
     }
 
-    // Expiration Check
-    if (Date.now() > user.otpExpires) {
-      return res.status(400).json({ success: false, message: "OTP has expired. Request a new one." });
-    }
-
-    // Validate OTP
     if (user.otp !== otp) {
       user.otpChances -= 1;
       await user.save();
-      return res.status(400).json({ 
-        success: false, 
-        message: `Incorrect OTP. ${user.otpChances} attempts remaining.` 
-      });
+      return res.status(400).json({ success: false, message: `Invalid OTP. ${user.otpChances} left.` });
     }
 
-    // --- SUCCESS ---
-    user.isLogged = true; // The account is now officially "created" and active
+    user.isLogged = true;
     user.otp = undefined; 
-    user.otpExpires = undefined;
     await user.save();
 
-    // Generate JWT
-    const token = jwt.sign(
-      { id: user._id, role: user.userType }, 
-      process.env.JWT_SECRET, 
-      { expiresIn: '30d' }
-    );
+    const token = jwt.sign({ id: user._id, role: user.userType }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
     res.status(200).json({
       success: true,
-      message: "Authentication successful",
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        phno: user.phno,
-        userType: user.userType,
-        location: user.location
+      user: { id: user._id, name: user.name, phno: user.phno, userType: user.userType, location: user.location }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get User Dashboard Stats (Part 4 of Home Page)
+// @route   GET /api/v1/auth/stats
+exports.getUserStats = async (req, res) => {
+  try {
+    // req.user.id comes from your protect middleware
+    const user = await User.findById(req.user.id);
+    
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        orders: 0, // In future, count from Order model
+        rating: user.rating || 0.0,
+        profit: 0
       }
     });
-
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

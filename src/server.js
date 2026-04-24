@@ -43,6 +43,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const sliderRoutes = require('./routes/sliderRoutes');
 const alertRoutes = require('./routes/alertRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const marketRoutes = require('./routes/marketRoutes');
 
 const app = express();
 
@@ -63,6 +64,7 @@ app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/sliders', sliderRoutes);
 app.use('/api/v1/alerts', alertRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/market', marketRoutes);
 
 // Basic Health Check
 app.get('/api/v1/health', (req, res) => {
