@@ -16,7 +16,7 @@ exports.createProduct = async (req, res) => {
 
     // Save all inputs in Product module with the link
     const product = await Product.create({
-      farmerId: req.user.id,
+      farmerId: req.user.id, // Linked to the logged-in farmer
       productName,
       pricePerUnit,
       unitGiven,
@@ -35,11 +35,10 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-// @desc    Get Market Prices (Top 10 products)
+// @desc    Get Market Prices (Top 10 products for Buyer/Public Home)
 // @route   GET /api/v1/products/market
 exports.getMarketProducts = async (req, res) => {
   try {
-    // Returns 10 product array for the Home Page
     const products = await Product.find()
       .select('productName pricePerUnit unitGiven productImageURL')
       .sort({ createdAt: -1 })
@@ -49,6 +48,80 @@ exports.getMarketProducts = async (req, res) => {
       success: true,
       count: products.length,
       data: products
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all products listed by the logged-in farmer
+// @route   GET /api/v1/products/farmer
+exports.getFarmerProducts = async (req, res) => {
+  try {
+    // Finds only products where farmerId matches the logged-in user
+    const products = await Product.find({ farmerId: req.user.id }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      data: products
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update product details (Edit function)
+// @route   PUT /api/v1/products/:id
+exports.updateProduct = async (req, res) => {
+  try {
+    let product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    // Security check: Ensure the farmer owns this product
+    if (product.farmerId.toString() !== req.user.id) {
+      return res.status(401).json({ success: false, message: "Not authorized to edit this product" });
+    }
+
+    // Update the product with the new values from req.body
+    product = await Product.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Product updated successfully",
+      data: product
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete product (Delete function)
+// @route   DELETE /api/v1/products/:id
+exports.deleteProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    // Security check: Ensure the farmer owns this product
+    if (product.farmerId.toString() !== req.user.id) {
+      return res.status(401).json({ success: false, message: "Not authorized to delete this product" });
+    }
+
+    await product.deleteOne();
+
+    res.status(200).json({
+      success: true,
+      message: "Product removed from inventory"
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
