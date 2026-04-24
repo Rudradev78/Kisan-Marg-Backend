@@ -15,7 +15,7 @@ exports.sendOTP = async (req, res) => {
      * CASE A: SIGN UP INTENT (Name is provided)
      */
     if (name) {
-      // If user exists and is ALREADY VERIFIED, block the registration
+      // Block only if the account is ALREADY verified/active
       if (user && user.isLogged) {
         return res.status(400).json({ 
           success: false, 
@@ -31,11 +31,10 @@ exports.sendOTP = async (req, res) => {
           userType, 
           name,
           location: location || "Not Provided",
-          isLogged: false // Account is not "active" until OTP is verified
+          isLogged: false // Account remains "pending" until verifyOTP
         });
       } else {
-        // If user exists but is NOT verified, treat this as a retry.
-        // Update name/location in case they are correcting a typo.
+        // Retry logic: Update name/location for the unverified record
         user.name = name;
         user.location = location || user.location;
       }
@@ -48,43 +47,42 @@ exports.sendOTP = async (req, res) => {
       if (!user) {
         return res.status(404).json({ 
           success: false, 
-          message: `No ${userType} account found. Please Sign Up first.` 
+          message: `No ${userType} account found with this number.` 
         });
       }
 
-      // If they try to Sign In to an account that was never verified
+      // Block sign-in if they never finished the OTP step during Sign Up
       if (!user.isLogged) {
         return res.status(401).json({
           success: false,
-          message: "Registration incomplete. Please Sign Up to verify your number."
+          message: "Registration incomplete. Please use the Sign Up page to verify."
         });
       }
     }
 
-    // 2. Generate 6-digit OTP
+    // 2. Generate/Refresh 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
     user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
     user.otpChances = 5; 
     
-    // Save the record (This updates the OTP regardless of whether it's a new or existing pending user)
+    // Save the record (Triggers Mongoose validation)
     await user.save();
 
     // 3. Send OTP via Fast2SMS (Non-blocking)
     const fast2smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=otp&variables_values=${otp}&numbers=${phno}`;
 
     axios.get(fast2smsUrl)
-      .then(response => console.log(`Fast2SMS [${userType}] success`))
+      .then(() => console.log(`✔ Fast2SMS [${userType}] OTP sent to ${phno}`))
       .catch(err => {
-        console.log(`Fast2SMS [${userType}] Gateway Error (DLT/Balance):`, err.response?.data?.message || err.message);
+        console.log(`❌ Fast2SMS Gateway Error:`, err.response?.data?.message || err.message);
       });
 
-    // 4. CRITICAL: High-Visibility Log for Render Logs (Bypass)
+    // 4. THE BYPASS: High-Visibility Log for Render
     console.log(`\n==========================================`);
     console.log(`🚀 KISAN MARG [${userType}] OTP BYPASS`);
-    console.log(`NAME: ${user.name} | PHONE: ${phno}`);
-    console.log(`VERIFICATION CODE: ${otp}`);
-    console.log(`STATUS: ${user.isLogged ? 'SIGN_IN' : 'SIGN_UP_PENDING'}`);
+    console.log(`USER: ${user.name} | PHONE: ${phno}`);
+    console.log(`CODE: ${otp} | VERIFIED: ${user.isLogged}`);
     console.log(`==========================================\n`);
 
     res.status(200).json({ 
@@ -111,17 +109,17 @@ exports.verifyOTP = async (req, res) => {
       return res.status(400).json({ success: false, message: "No active OTP found. Please resend." });
     }
 
-    // Rate Limit Check
+    // 5 Chances Rule
     if (user.otpChances <= 0) {
       return res.status(403).json({ 
         success: false, 
-        message: "Account locked. Please wait before trying again." 
+        message: "Account locked due to too many attempts. Please try again later." 
       });
     }
 
     // Expiration Check
     if (Date.now() > user.otpExpires) {
-      return res.status(400).json({ success: false, message: "OTP has expired." });
+      return res.status(400).json({ success: false, message: "OTP has expired. Request a new one." });
     }
 
     // Validate OTP
@@ -134,8 +132,8 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // SUCCESS - Finalize Account Creation/Login
-    user.isLogged = true; // THIS officially creates the "active" user
+    // --- SUCCESS ---
+    user.isLogged = true; // The account is now officially "created" and active
     user.otp = undefined; 
     user.otpExpires = undefined;
     await user.save();
@@ -149,6 +147,7 @@ exports.verifyOTP = async (req, res) => {
 
     res.status(200).json({
       success: true,
+      message: "Authentication successful",
       token,
       user: {
         id: user._id,
