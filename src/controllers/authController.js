@@ -8,15 +8,15 @@ exports.sendOTP = async (req, res) => {
   try {
     const { phno, userType, name, location } = req.body;
 
-    // 1. ROLE ISOLATION: Check if user exists for THIS specific role
+    // 1. Search for user by BOTH phone and role
     let user = await User.findOne({ phno, userType });
 
     /**
-     * CASE A: USER SIGNING UP
-     * If 'name' is provided, we treat this as a registration attempt.
+     * CASE A: SIGN UP INTENT (Name is provided)
      */
     if (name) {
-      if (user) {
+      // If user exists and is ALREADY VERIFIED, block the registration
+      if (user && user.isLogged) {
         return res.status(400).json({ 
           success: false, 
           isExistingUser: true,
@@ -24,25 +24,41 @@ exports.sendOTP = async (req, res) => {
         });
       }
       
-      // Create new user record (Account is pending until OTP verification)
-      user = await User.create({ 
-        phno, 
-        userType, 
-        name,
-        location: location || "Not Provided",
-        isLogged: false
-      });
+      // If user doesn't exist, create a "pending" record
+      if (!user) {
+        user = new User({ 
+          phno, 
+          userType, 
+          name,
+          location: location || "Not Provided",
+          isLogged: false // Account is not "active" until OTP is verified
+        });
+      } else {
+        // If user exists but is NOT verified, treat this as a retry.
+        // Update name/location in case they are correcting a typo.
+        user.name = name;
+        user.location = location || user.location;
+      }
     }
 
     /**
-     * CASE B: USER SIGNING IN
-     * If no 'name' is provided, we expect an existing account for this role.
+     * CASE B: SIGN IN INTENT (No name provided)
      */
-    if (!name && !user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: `No ${userType} account found. Please Sign Up first.` 
-      });
+    if (!name) {
+      if (!user) {
+        return res.status(404).json({ 
+          success: false, 
+          message: `No ${userType} account found. Please Sign Up first.` 
+        });
+      }
+
+      // If they try to Sign In to an account that was never verified
+      if (!user.isLogged) {
+        return res.status(401).json({
+          success: false,
+          message: "Registration incomplete. Please Sign Up to verify your number."
+        });
+      }
     }
 
     // 2. Generate 6-digit OTP
@@ -50,54 +66,56 @@ exports.sendOTP = async (req, res) => {
     user.otp = otp;
     user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
     user.otpChances = 5; 
+    
+    // Save the record (This updates the OTP regardless of whether it's a new or existing pending user)
     await user.save();
 
-    // 3. Send OTP via Fast2SMS (Non-blocking / Bulletproof)
+    // 3. Send OTP via Fast2SMS (Non-blocking)
     const fast2smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=otp&variables_values=${otp}&numbers=${phno}`;
 
     axios.get(fast2smsUrl)
-      .then(response => console.log(`Fast2SMS [${userType}] success:`, response.data.message))
+      .then(response => console.log(`Fast2SMS [${userType}] success`))
       .catch(err => {
-        console.log(`Fast2SMS [${userType}] Gateway Error:`, err.response?.data?.message || err.message);
+        console.log(`Fast2SMS [${userType}] Gateway Error (DLT/Balance):`, err.response?.data?.message || err.message);
       });
 
-    // 4. CRITICAL: High-Visibility Log for Render Logs
+    // 4. CRITICAL: High-Visibility Log for Render Logs (Bypass)
     console.log(`\n==========================================`);
-    console.log(`🚀 KISAN MARG LOGIN ATTEMPT`);
-    console.log(`ROLE: ${userType} | NAME: ${user.name}`);
-    console.log(`PHONE: ${phno} | OTP: ${otp}`);
+    console.log(`🚀 KISAN MARG [${userType}] OTP BYPASS`);
+    console.log(`NAME: ${user.name} | PHONE: ${phno}`);
+    console.log(`VERIFICATION CODE: ${otp}`);
+    console.log(`STATUS: ${user.isLogged ? 'SIGN_IN' : 'SIGN_UP_PENDING'}`);
     console.log(`==========================================\n`);
 
     res.status(200).json({ 
         success: true, 
         message: "OTP sent successfully.",
-        isExistingUser: !!name // Returns true if we just processed a signup
+        isExistingUser: user.isLogged 
     });
 
   } catch (error) {
     console.error("Auth Controller Error:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
   }
 };
 
-// @desc    Verify OTP and Generate JWT
+// @desc    Verify OTP and Finalize Account
 // @route   POST /api/v1/auth/verify
 exports.verifyOTP = async (req, res) => {
   try {
     const { phno, otp, userType } = req.body;
 
-    // Search by both phone and userType to verify the correct account
     const user = await User.findOne({ phno, userType });
 
     if (!user || !user.otp) {
-      return res.status(400).json({ success: false, message: "No active OTP found." });
+      return res.status(400).json({ success: false, message: "No active OTP found. Please resend." });
     }
 
     // Rate Limit Check
     if (user.otpChances <= 0) {
       return res.status(403).json({ 
         success: false, 
-        message: "Account locked due to too many attempts. Try later." 
+        message: "Account locked. Please wait before trying again." 
       });
     }
 
@@ -116,13 +134,13 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // SUCCESS - Finalize Account
-    user.isLogged = true;
+    // SUCCESS - Finalize Account Creation/Login
+    user.isLogged = true; // THIS officially creates the "active" user
     user.otp = undefined; 
     user.otpExpires = undefined;
     await user.save();
 
-    // Create JWT
+    // Generate JWT
     const token = jwt.sign(
       { id: user._id, role: user.userType }, 
       process.env.JWT_SECRET, 
