@@ -131,23 +131,37 @@ exports.getUserStats = async (req, res) => {
 // @route   PUT /api/v1/auth/profile
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, farmName, businessAddress, location, locationCoords } = req.body;
-    let updateData = { name, farmName, businessAddress, location, locationCoords };
+    // 1. Destructure everything EXCEPT the coordinates first
+    const { name, farmName, businessAddress, location } = req.body;
+    
+    // 2. Initialize update object
+    let updateData = { name, farmName, businessAddress, location };
 
-    // Handle Profile Image Upload if a new file is picked
+    // 3. Handle Profile Image (Upload to Cloudinary)
     if (req.file) {
       const result = await uploadToCloudinary(req.file.buffer, "kisan_marg_profiles");
       updateData.dpImageURL = result.secure_url;
     }
 
+    // 4. Handle Location Coordinates (Parse string to Object)
+    // We only add it to updateData if it exists and is successfully parsed
     if (req.body.locationCoords) {
-      updateData.locationCoords = JSON.parse(req.body.locationCoords);
+      try {
+        updateData.locationCoords = JSON.parse(req.body.locationCoords);
+      } catch (e) {
+        console.log("Coords parsing failed, skipping coordinates update.");
+      }
     }
 
+    // 5. Update Database
     const user = await User.findByIdAndUpdate(req.user.id, updateData, {
       new: true,
       runValidators: true,
     });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
 
     res.status(200).json({
       success: true,
@@ -155,6 +169,7 @@ exports.updateProfile = async (req, res) => {
       data: user
     });
   } catch (error) {
+    console.error("Update Profile Error:", error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };
