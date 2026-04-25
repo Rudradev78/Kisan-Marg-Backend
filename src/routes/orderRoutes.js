@@ -4,7 +4,8 @@ const {
   createOrder, 
   updateOrderStatus, 
   deleteOrder, 
-  getFarmerOrders 
+  getFarmerOrders,
+  getFarmerHistory
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/authMiddleware');
 
