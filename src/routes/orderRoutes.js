@@ -12,5 +12,6 @@ router.post('/', protect, createOrder);
 router.get('/farmer', protect, getFarmerOrders); // <--- For the Orders Screen
 router.put('/:id/status', protect, updateOrderStatus); // <--- For status buttons
 router.delete('/:id', protect, deleteOrder); // <--- For the Deny button
+router.get('/farmer/history', protect, getFarmerHistory);
 
 module.exports = router;

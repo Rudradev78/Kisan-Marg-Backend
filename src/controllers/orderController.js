@@ -105,3 +105,32 @@ exports.getFarmerOrders = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// @desc    Get Sales History for Farmer (Completed/Cancelled only)
+// @route   GET /api/v1/orders/farmer/history
+exports.getFarmerHistory = async (req, res) => {
+  try {
+    const history = await Order.find({ 
+      farmerId: req.user.id, 
+      status: { $in: ['Completed', 'Cancelled'] } 
+    })
+    .populate('buyerId', 'name location')
+    .populate('product', 'productName')
+    .sort('-updatedAt');
+
+    // Calculate Summary Stats
+    const totalSales = history
+      .filter(o => o.status === 'Completed')
+      .reduce((sum, order) => sum + order.totalPrice, 0);
+
+    const ordersDone = history.filter(o => o.status === 'Completed').length;
+
+    res.status(200).json({
+      success: true,
+      stats: { totalSales, ordersDone },
+      data: history
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
