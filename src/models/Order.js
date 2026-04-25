@@ -11,7 +11,7 @@ const OrderSchema = new mongoose.Schema({
   handlingCharge: { type: Number, default: 0 }, 
   status: { 
     type: String, 
-    enum: ['Requested', 'Accepted', 'Ongoing', 'Completed', 'Cancelled'], 
+    enum: ['Requested', 'Accepted', 'Packed', 'Out for Delivery', 'Completed', 'Cancelled'], 
     default: 'Requested' 
   },
   transactionId: { type: String }, 

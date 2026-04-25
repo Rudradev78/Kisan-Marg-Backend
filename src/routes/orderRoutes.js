@@ -3,14 +3,14 @@ const router = express.Router();
 const { 
   createOrder, 
   updateOrderStatus, 
-  getMyOrders 
+  deleteOrder, 
+  getFarmerOrders 
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/authMiddleware');
 
-router.use(protect); // All order routes require login
-
-router.post('/', createOrder);
-router.get('/my-orders', getMyOrders);
-router.put('/:id/status', updateOrderStatus);
+router.post('/', protect, createOrder);
+router.get('/farmer', protect, getFarmerOrders); // <--- For the Orders Screen
+router.put('/:id/status', protect, updateOrderStatus); // <--- For status buttons
+router.delete('/:id', protect, deleteOrder); // <--- For the Deny button
 
 module.exports = router;
