@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
+const { uploadToCloudinary } = require('../utils/cloudinaryHelper');
 
 // @desc    Send OTP to User (Handles Role-Specific SignUp & SignIn)
 // @route   POST /api/v1/auth/login
@@ -121,6 +122,37 @@ exports.getUserStats = async (req, res) => {
         rating: user.rating || 0.0,
         profit: 0
       }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+// @desc    Update Farmer Profile
+// @route   PUT /api/v1/auth/profile
+exports.updateProfile = async (req, res) => {
+  try {
+    const { name, farmName, businessAddress, location, locationCoords } = req.body;
+    let updateData = { name, farmName, businessAddress, location, locationCoords };
+
+    // Handle Profile Image Upload if a new file is picked
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, "kisan_marg_profiles");
+      updateData.dpImageURL = result.secure_url;
+    }
+
+    if (req.body.locationCoords) {
+      updateData.locationCoords = JSON.parse(req.body.locationCoords);
+    }
+
+    const user = await User.findByIdAndUpdate(req.user.id, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: user
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

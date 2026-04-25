@@ -5,8 +5,7 @@ const { protect } = require('../middleware/authMiddleware'); // You need your pr
 
 router.post('/login', sendOTP);
 router.post('/verify', verifyOTP);
-
-// This is the new route for your Home Page Part 4
 router.get('/stats', protect, getUserStats); 
+router.put('/profile', protect, upload.single('image'), updateProfile);
 
 module.exports = router;

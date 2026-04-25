@@ -2,19 +2,26 @@ const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true }, 
-  // REMOVED unique: true from phno
   phno: { type: String, required: true }, 
   email: { type: String }, 
-  aadhar: { type: String }, // Redacted digits for privacy in production
-  dpImageURL: { type: String }, 
+  aadhar: { type: String }, // Redacted for privacy
+  dpImageURL: { type: String, default: 'https://via.placeholder.com/150' }, 
   userType: { type: String, enum: ['Farmer', 'Buyer', 'Admin'], required: true }, 
-  location: { type: String },
+  location: { type: String }, // Manual/Map Location
   isLogged: { type: Boolean, default: false },
   rating: { type: Number, default: 0 }, 
   
-  // Farmer Specific
+  // --- Farmer Specific Business Details ---
+  farmName: { type: String, default: "" },
+  businessAddress: { type: String, default: "" },
+  experience: { type: String, default: "0" },
+  totalSales: { type: Number, default: 0 },
   transactionModes: [String], 
   stockId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' }, 
+  locationCoords: {
+    latitude: { type: Number, default: 20.2961 }, // Default to Odisha/Bhubaneswar
+    longitude: { type: Number, default: 85.8245 }
+  },
   
   // Buyer Specific
   wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }], 
@@ -26,11 +33,6 @@ const UserSchema = new mongoose.Schema({
   lockUntil: Date 
 }, { timestamps: true }); 
 
-/**
- * COMPOUND INDEX
- * This allows one number to have multiple accounts (one as Farmer, one as Buyer)
- * but prevents two 'Buyer' accounts with the same number.
- */
 UserSchema.index({ phno: 1, userType: 1 }, { unique: true });
 
 module.exports = mongoose.model('User', UserSchema);
