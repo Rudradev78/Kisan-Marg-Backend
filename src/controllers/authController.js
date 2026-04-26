@@ -174,3 +174,23 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
+// @desc    Toggle Wishlist (Add or Remove)
+// @route   POST /api/v1/auth/wishlist/:productId
+exports.toggleWishlist = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    const { productId } = req.params;
+    const index = user.wishlist.indexOf(productId);
+
+    if (index === -1) {
+      user.wishlist.push(productId); // Add
+    } else {
+      user.wishlist.splice(index, 1); // Remove
+    }
+
+    await user.save();
+    res.status(200).json({ success: true, wishlist: user.wishlist });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

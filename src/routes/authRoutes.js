@@ -4,7 +4,8 @@ const {
   sendOTP, 
   verifyOTP, 
   getUserStats, 
-  updateProfile
+  updateProfile,
+  toggleWishlist
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
@@ -14,5 +15,6 @@ router.post('/login', sendOTP);
 router.post('/verify', verifyOTP);
 router.get('/stats', protect, getUserStats);
 router.put('/profile', protect, upload.single('image'), updateProfile);
+router.post('/wishlist/:productId', protect, toggleWishlist);
 
 module.exports = router;

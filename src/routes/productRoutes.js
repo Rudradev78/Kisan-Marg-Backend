@@ -37,4 +37,7 @@ router.put('/:id', protect, updateProduct);
 // @route   DELETE /api/v1/products/:id
 router.delete('/:id', protect, deleteProduct);
 
+// Add this to your existing productRoutes.js
+router.get('/:id', getProductById);
+
 module.exports = router;

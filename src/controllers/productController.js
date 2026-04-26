@@ -37,18 +37,25 @@ exports.createProduct = async (req, res) => {
 
 // @desc    Get Market Prices (Top 10 products for Buyer/Public Home)
 // @route   GET /api/v1/products/market
+// Update your getMarketProducts to this:
 exports.getMarketProducts = async (req, res) => {
   try {
     const products = await Product.find()
-      .select('productName pricePerUnit unitGiven productImageURL')
+      .populate('farmerId', 'name farmName') // Get farmer details
       .sort({ createdAt: -1 })
       .limit(10);
+    res.status(200).json({ success: true, data: products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
-    res.status(200).json({
-      success: true,
-      count: products.length,
-      data: products
-    });
+// ADD THIS NEW FUNCTION:
+exports.getProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id).populate('farmerId', 'name farmName businessAddress location phno');
+    if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+    res.status(200).json({ success: true, data: product });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -123,6 +130,23 @@ exports.deleteProduct = async (req, res) => {
       success: true,
       message: "Product removed from inventory"
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get Single Product Details (For Buyer Product Page)
+// @route   GET /api/v1/products/:id
+exports.getProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate('farmerId', 'name farmName businessAddress locationCoords phno');
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    res.status(200).json({ success: true, data: product });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
