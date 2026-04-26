@@ -151,3 +151,18 @@ exports.getProductById = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// @desc    Search products by name (substring matching)
+// @route   GET /api/v1/products/search?q=keyword
+exports.searchProducts = async (req, res) => {
+  try {
+    const { q } = req.query;
+    const products = await Product.find({
+      productName: { $regex: q, $options: 'i' } // 'i' makes it case-insensitive
+    }).populate('farmerId', 'farmName');
+
+    res.status(200).json({ success: true, data: products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
