@@ -106,19 +106,19 @@ exports.verifyOTP = async (req, res) => {
   }
 };
 
-// @desc    Get User Dashboard Stats (Part 4 of Home Page)
+// @desc    Get User Dashboard Stats & Profile Info
 // @route   GET /api/v1/auth/stats
 exports.getUserStats = async (req, res) => {
   try {
-    // req.user.id comes from your protect middleware
     const user = await User.findById(req.user.id);
     
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
     res.status(200).json({
       success: true,
+      user, // <--- ADD THIS: Sends the full profile details (farmName, address, etc.)
       stats: {
-        orders: 0, // In future, count from Order model
+        orders: 0, 
         rating: user.rating || 0.0,
         profit: 0
       }
@@ -173,3 +173,4 @@ exports.updateProfile = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
