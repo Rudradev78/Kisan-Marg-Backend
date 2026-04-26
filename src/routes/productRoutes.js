@@ -5,7 +5,8 @@ const {
     getMarketProducts, 
     getFarmerProducts, 
     updateProduct, 
-    deleteProduct 
+    deleteProduct,
+    getProductById
 } = require('../controllers/productController');
 
 const { protect } = require('../middleware/authMiddleware');
