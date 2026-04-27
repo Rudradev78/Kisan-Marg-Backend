@@ -131,41 +131,63 @@ exports.getUserStats = async (req, res) => {
 // @route   PUT /api/v1/auth/profile
 exports.updateProfile = async (req, res) => {
   try {
-    // 1. Destructure everything EXCEPT the coordinates first
-    const { name, farmName, businessAddress, location } = req.body;
-    
-    // 2. Initialize update object
-    let updateData = { name, farmName, businessAddress, location };
-
-    // 3. Handle Profile Image (Upload to Cloudinary)
-    if (req.file) {
-      const result = await uploadToCloudinary(req.file.buffer, "kisan_marg_profiles");
-      updateData.dpImageURL = result.secure_url;
-    }
-
-    // 4. Handle Location Coordinates (Parse string to Object)
-    // We only add it to updateData if it exists and is successfully parsed
-    if (req.body.locationCoords) {
-      try {
-        updateData.locationCoords = JSON.parse(req.body.locationCoords);
-      } catch (e) {
-        console.log("Coords parsing failed, skipping coordinates update.");
-      }
-    }
-
-    // 5. Update Database
-    const user = await User.findByIdAndUpdate(req.user.id, updateData, {
-      new: true,
-      runValidators: true,
-    });
-
+    // 1. Fetch the user first (needed for sub-document array manipulation)
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
+    // 2. Handle Basic Info Updates (Name, Farm Name, etc.)
+    if (req.body.name) user.name = req.body.name;
+    if (req.body.farmName) user.farmName = req.body.farmName;
+    if (req.body.businessAddress) user.businessAddress = req.body.businessAddress;
+    if (req.body.location) user.location = req.body.location;
+
+    // 3. Handle Profile Image (Cloudinary)
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, "kisan_marg_profiles");
+      user.dpImageURL = result.secure_url;
+    }
+
+    // 4. Handle Coordinates
+    if (req.body.locationCoords) {
+      try {
+        user.locationCoords = JSON.parse(req.body.locationCoords);
+      } catch (e) {
+        console.log("Coords parsing failed.");
+      }
+    }
+
+    // 5. --- THE FIX: Handle Address Update Logic ---
+    if (req.body.addressUpdate) {
+      // If your frontend sends JSON in a multipart request, you might need to parse it
+      const addrData = typeof req.body.addressUpdate === 'string' 
+        ? JSON.parse(req.body.addressUpdate) 
+        : req.body.addressUpdate;
+
+      const { addressId, type, name, phone, address } = addrData;
+
+      if (addressId) {
+        // CASE: EDIT EXISTING ADDRESS
+        const existingAddr = user.addresses.id(addressId);
+        if (existingAddr) {
+          existingAddr.type = type;
+          existingAddr.name = name;
+          existingAddr.phone = phone;
+          existingAddr.address = address;
+        }
+      } else {
+        // CASE: ADD NEW ADDRESS
+        user.addresses.push({ type, name, phone, address });
+      }
+    }
+
+    // 6. Save the user
+    await user.save();
+
     res.status(200).json({
       success: true,
-      message: "Profile updated successfully",
+      message: "Profile and addresses updated successfully",
       data: user
     });
   } catch (error) {
@@ -193,4 +215,35 @@ exports.toggleWishlist = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
+};
+
+// Get all addresses
+exports.getAddresses = async (req, res) => {
+  const user = await User.findById(req.user.id);
+  res.status(200).json({ success: true, data: user.addresses });
+};
+
+// Add/Update Address
+exports.saveAddress = async (req, res) => {
+  const user = await User.findById(req.user.id);
+  const { addressId, type, name, phone, address } = req.body;
+
+  if (addressId) {
+    // Update existing
+    const addr = user.addresses.id(addressId);
+    addr.type = type; addr.name = name; addr.phone = phone; addr.address = address;
+  } else {
+    // Add new
+    user.addresses.push({ type, name, phone, address });
+  }
+  await user.save();
+  res.status(200).json({ success: true, data: user.addresses });
+};
+
+// Delete Address
+exports.deleteAddress = async (req, res) => {
+  const user = await User.findById(req.user.id);
+  user.addresses.pull(req.params.id);
+  await user.save();
+  res.status(200).json({ success: true, data: user.addresses });
 };
