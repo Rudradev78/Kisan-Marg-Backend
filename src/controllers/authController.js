@@ -131,44 +131,32 @@ exports.getUserStats = async (req, res) => {
 // @route   PUT /api/v1/auth/profile
 exports.updateProfile = async (req, res) => {
   try {
-    // 1. Fetch the user first (needed for sub-document array manipulation)
     const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    // 2. Handle Basic Info Updates (Name, Farm Name, etc.)
+    // 1. Basic Info Updates
     if (req.body.name) user.name = req.body.name;
+    if (req.body.email) user.email = req.body.email;
+    if (req.body.phno) user.phno = req.body.phno;
     if (req.body.farmName) user.farmName = req.body.farmName;
     if (req.body.businessAddress) user.businessAddress = req.body.businessAddress;
-    if (req.body.location) user.location = req.body.location;
 
-    // 3. Handle Profile Image (Cloudinary)
+    // 2. Profile Image Update
     if (req.file) {
-      const result = await uploadToCloudinary(req.file.buffer, "kisan_marg_profiles");
-      user.dpImageURL = result.secure_url;
+       // Assuming you have your Cloudinary logic here
+       const result = await uploadToCloudinary(req.file.buffer, "profiles");
+       user.dpImageURL = result.secure_url;
     }
 
-    // 4. Handle Coordinates
-    if (req.body.locationCoords) {
-      try {
-        user.locationCoords = JSON.parse(req.body.locationCoords);
-      } catch (e) {
-        console.log("Coords parsing failed.");
-      }
-    }
-
-    // 5. --- THE FIX: Handle Address Update Logic ---
+    // 3. Address Update Logic (Modal Functionality)
     if (req.body.addressUpdate) {
-      // If your frontend sends JSON in a multipart request, you might need to parse it
-      const addrData = typeof req.body.addressUpdate === 'string' 
-        ? JSON.parse(req.body.addressUpdate) 
-        : req.body.addressUpdate;
+      const { addressId, type, name, phone, address } = req.body.addressUpdate;
 
-      const { addressId, type, name, phone, address } = addrData;
+      // 🛡️ Safety: Initialize array if it doesn't exist
+      if (!user.addresses) user.addresses = [];
 
       if (addressId) {
-        // CASE: EDIT EXISTING ADDRESS
+        // Edit Existing
         const existingAddr = user.addresses.id(addressId);
         if (existingAddr) {
           existingAddr.type = type;
@@ -177,21 +165,14 @@ exports.updateProfile = async (req, res) => {
           existingAddr.address = address;
         }
       } else {
-        // CASE: ADD NEW ADDRESS
+        // Add New
         user.addresses.push({ type, name, phone, address });
       }
     }
 
-    // 6. Save the user
     await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Profile and addresses updated successfully",
-      data: user
-    });
+    res.status(200).json({ success: true, data: user });
   } catch (error) {
-    console.error("Update Profile Error:", error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -202,21 +183,35 @@ exports.toggleWishlist = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     const { productId } = req.params;
-    const index = user.wishlist.indexOf(productId);
 
-    if (index === -1) {
-      user.wishlist.push(productId); // Add
-    } else {
-      user.wishlist.splice(index, 1); // Remove
+    // 1. SAFETY CHECK: Ensure the array exists (prevents "cannot read property push of undefined")
+    if (!user.wishlist) {
+      user.wishlist = [];
     }
 
+    // 2. ROBUST MATCHING: Use .toString() to ensure we compare String vs String
+    const index = user.wishlist.findIndex(id => id.toString() === productId);
+
+    if (index === -1) {
+      // Logic: Add to wishlist if not present
+      user.wishlist.push(productId);
+    } else {
+      // Logic: Remove from wishlist if already present
+      user.wishlist.splice(index, 1);
+    }
+
+    // 3. Persist and Return
     await user.save();
-    res.status(200).json({ success: true, wishlist: user.wishlist });
+    
+    res.status(200).json({ 
+      success: true, 
+      wishlist: user.wishlist 
+    });
   } catch (error) {
+    console.error("Wishlist Toggle Error:", error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 // Get all addresses
 exports.getAddresses = async (req, res) => {
   const user = await User.findById(req.user.id);
@@ -242,8 +237,15 @@ exports.saveAddress = async (req, res) => {
 
 // Delete Address
 exports.deleteAddress = async (req, res) => {
-  const user = await User.findById(req.user.id);
-  user.addresses.pull(req.params.id);
-  await user.save();
-  res.status(200).json({ success: true, data: user.addresses });
+  try {
+    const user = await User.findById(req.user.id);
+    
+    // Mongoose "pull" removes sub-document by its _id
+    user.addresses.pull(req.params.id);
+    
+    await user.save();
+    res.status(200).json({ success: true, data: user.addresses });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
