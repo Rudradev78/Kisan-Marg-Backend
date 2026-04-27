@@ -5,7 +5,8 @@ const {
   updateOrderStatus, 
   deleteOrder, 
   getFarmerOrders,
-  getFarmerHistory
+  getFarmerHistory,
+  getBuyerOrders
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -14,5 +15,6 @@ router.get('/farmer', protect, getFarmerOrders); // <--- For the Orders Screen
 router.put('/:id/status', protect, updateOrderStatus); // <--- For status buttons
 router.delete('/:id', protect, deleteOrder); // <--- For the Deny button
 router.get('/farmer/history', protect, getFarmerHistory);
+router.get('/buyer', protect, getBuyerOrders);
 
 module.exports = router;

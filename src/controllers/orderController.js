@@ -134,3 +134,23 @@ exports.getFarmerHistory = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// @desc    Get Buyer's Order History
+// @route   GET /api/v1/orders/buyer
+exports.getBuyerOrders = async (req, res) => {
+  try {
+    // Find orders where buyerId matches the logged-in user
+    const orders = await Order.find({ buyerId: req.user.id })
+      .populate('product', 'productName productImageURL unitGiven')
+      .populate('farmerId', 'farmName')
+      .sort('-createdAt'); // Newest first
+
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      data: orders
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
