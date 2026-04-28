@@ -6,15 +6,19 @@ const {
   deleteOrder, 
   getFarmerOrders,
   getFarmerHistory,
-  getBuyerOrders
+  getBuyerOrders,
+  createRazorpayOrder,
+  verifyPayment
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.post('/', protect, createOrder);
-router.get('/farmer', protect, getFarmerOrders); // <--- For the Orders Screen
-router.put('/:id/status', protect, updateOrderStatus); // <--- For status buttons
-router.delete('/:id', protect, deleteOrder); // <--- For the Deny button
+router.get('/farmer', protect, getFarmerOrders);
+router.put('/:id/status', protect, updateOrderStatus);
+router.delete('/:id', protect, deleteOrder);
 router.get('/farmer/history', protect, getFarmerHistory);
 router.get('/buyer', protect, getBuyerOrders);
+router.post('/razorpay', protect, createRazorpayOrder);
+router.post('/verify', protect, verifyPayment);
 
 module.exports = router;
