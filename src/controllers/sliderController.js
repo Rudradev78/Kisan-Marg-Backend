@@ -62,16 +62,21 @@ exports.deleteSliderGroup = async (req, res) => {
 // @route   GET /api/v1/sliders
 exports.getHomeSliders = async (req, res) => {
   try {
-    const { userType } = req.query; // Farmer or Buyer
+    const { userType } = req.query;
 
-    // Access Slider Module based on userType variable
-    const sliders = await Slider.find({ 
-      userType: { $in: [userType, 'Both'] },
-      isActive: true 
-    }).sort('sliderPosition');
+    let query = { isActive: true };
+
+    // FIX: Only apply the filter if userType is specified (Farmer/Buyer)
+    // If userType is undefined (as it is when clicking "All"), it returns all sliders
+    if (userType && userType !== 'All') {
+      query.userType = { $in: [userType, 'Both'] };
+    }
+
+    const sliders = await Slider.find(query).sort('sliderPosition');
 
     res.status(200).json({
       success: true,
+      count: sliders.length,
       data: sliders
     });
   } catch (error) {

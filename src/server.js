@@ -10,7 +10,10 @@ const helmet = require('helmet');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorMiddleware');
+const uploadRoutes = require('./src/routes/uploadRoutes');
 
+// ... other routes ...
+app.use('/api/v1/upload', uploadRoutes);
 // 1. Load Environment Variables
 dotenv.config();
 
