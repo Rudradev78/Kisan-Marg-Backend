@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const upload = require('../middleware/upload'); // Adjust path to your upload.js
+const upload = require('../middleware/uploadMiddleware'); // Adjust path to your upload.js
 const { uploadImage } = require('../controllers/uploadController');
 const { protect } = require('../middleware/authMiddleware');
 

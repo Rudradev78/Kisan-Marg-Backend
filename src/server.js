@@ -12,8 +12,6 @@ const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorMiddleware');
 const uploadRoutes = require('./routes/uploadRoutes');
 
-// ... other routes ...
-app.use('/api/v1/upload', uploadRoutes);
 // 1. Load Environment Variables
 dotenv.config();
 
@@ -47,7 +45,6 @@ const sliderRoutes = require('./routes/sliderRoutes');
 const alertRoutes = require('./routes/alertRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const marketRoutes = require('./routes/marketRoutes');
-
 const app = express();
 
 // 4. Global Middleware
@@ -68,6 +65,7 @@ app.use('/api/v1/sliders', sliderRoutes);
 app.use('/api/v1/alerts', alertRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/market', marketRoutes);
+app.use('/api/v1/upload', uploadRoutes);
 
 // Basic Health Check
 app.get('/api/v1/health', (req, res) => {
