@@ -1,4 +1,24 @@
 const Slider = require('../models/Slider');
+const { uploadToCloudinary } = require('../utils/cloudinaryHelper'); // 👈 Double check this path!
+
+// @desc    Upload Image to Cloudinary (Specific for Sliders)
+exports.uploadSliderImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No image file provided" });
+    }
+
+    // Uses your existing helper buffer logic
+    const result = await uploadToCloudinary(req.file.buffer, "kisan_marg_sliders");
+
+    res.status(200).json({
+      success: true,
+      url: result.secure_url
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 // @desc    Create a new empty slider group
 exports.createSliderGroup = async (req, res) => {
@@ -14,6 +34,8 @@ exports.createSliderGroup = async (req, res) => {
 exports.addCardToSlider = async (req, res) => {
   try {
     const slider = await Slider.findById(req.params.id);
+    if (!slider) return res.status(404).json({ success: false, message: "Slider group not found" });
+    
     slider.sliderImages.push(req.body);
     await slider.save();
     res.status(200).json({ success: true, data: slider });
@@ -28,6 +50,9 @@ exports.updateSliderCard = async (req, res) => {
     const { sliderId, cardId } = req.params;
     const slider = await Slider.findById(sliderId);
     const card = slider.sliderImages.id(cardId);
+    
+    if (!card) return res.status(404).json({ success: false, message: "Card not found" });
+    
     Object.assign(card, req.body);
     await slider.save();
     res.status(200).json({ success: true, data: slider });
@@ -59,26 +84,17 @@ exports.deleteSliderGroup = async (req, res) => {
 };
 
 // @desc    Fetch Home Page Sliders
-// @route   GET /api/v1/sliders
 exports.getHomeSliders = async (req, res) => {
   try {
     const { userType } = req.query;
-
     let query = { isActive: true };
 
-    // FIX: Only apply the filter if userType is specified (Farmer/Buyer)
-    // If userType is undefined (as it is when clicking "All"), it returns all sliders
     if (userType && userType !== 'All') {
       query.userType = { $in: [userType, 'Both'] };
     }
 
     const sliders = await Slider.find(query).sort('sliderPosition');
-
-    res.status(200).json({
-      success: true,
-      count: sliders.length,
-      data: sliders
-    });
+    res.status(200).json({ success: true, count: sliders.length, data: sliders });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
