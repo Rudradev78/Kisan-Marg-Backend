@@ -10,7 +10,6 @@ const helmet = require('helmet');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorMiddleware');
-const uploadRoutes = require('./routes/uploadRoutes');
 
 // 1. Load Environment Variables
 dotenv.config();
@@ -65,8 +64,6 @@ app.use('/api/v1/sliders', sliderRoutes);
 app.use('/api/v1/alerts', alertRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/market', marketRoutes);
-app.use('/api/v1/upload', uploadRoutes);
-
 // Basic Health Check
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({ 
