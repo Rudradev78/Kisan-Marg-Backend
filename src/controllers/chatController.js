@@ -1,49 +1,35 @@
 const Chat = require('../models/Chat');
 
-// @desc    Get or Create Chat between two users
-// @route   POST /api/v1/chats/get-chat
+// Get messages for a specific user chat
 exports.getMessages = async (req, res) => {
   try {
-    const { recipientId } = req.body;
-    const userId = req.user.id;
+    const { userId } = req.body; 
 
-    // Find chat where both users are participants
-    let chat = await Chat.findOne({
-      participants: { $all: [userId, recipientId] }
-    });
+    let chat = await Chat.findOne({ userId });
 
     if (!chat) {
-      chat = await Chat.create({
-        participants: [userId, recipientId],
-        messages: []
-      });
+      chat = await Chat.create({ userId, messages: [] });
     }
 
-    res.status(200).json({
-      success: true,
-      data: chat.messages // Returns the message array one by one
-    });
+    res.status(200).json({ success: true, data: chat.messages });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Send a new message
-// @route   POST /api/v1/chats/send
+// Send a message
 exports.sendMessage = async (req, res) => {
   try {
-    const { recipientId, message } = req.body;
-    const userId = req.user.id;
+    const { userId, message, senderType } = req.body;
 
     const newMessage = {
-      message: message, // "Story" text
+      message: message,
       time: new Date(),
-      sender: req.user.userType, // Admin, Farmer, or Buyer
-      senderId: userId
+      sender: senderType, // Pass 'Admin' from Web, 'User' from App
     };
 
     const chat = await Chat.findOneAndUpdate(
-      { participants: { $all: [userId, recipientId] } },
+      { userId },
       { $push: { messages: newMessage } },
       { new: true, upsert: true }
     );
