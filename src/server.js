@@ -44,7 +44,6 @@ const sliderRoutes = require('./routes/sliderRoutes');
 const alertRoutes = require('./routes/alertRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const marketRoutes = require('./routes/marketRoutes');
-const chatRoutes = require('./routes/chatRoutes');
 const app = express();
 
 // 4. Global Middleware
@@ -65,7 +64,6 @@ app.use('/api/v1/sliders', sliderRoutes);
 app.use('/api/v1/alerts', alertRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/market', marketRoutes);
-app.use('/api/v1/chats', chatRoutes);
 // Basic Health Check
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({ 
