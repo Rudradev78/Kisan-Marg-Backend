@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer'); // Import multer directly
+const multer = require('multer');
 
 // Internal Multer Setup (Memory Storage)
 const storage = multer.memoryStorage();
@@ -21,25 +21,24 @@ const {
 
 const { protect } = require('../middleware/authMiddleware');
 
-// @desc    Get top 10 products for the Home Page
-router.get('/market', getMarketProducts);
+// ==========================================
+//   STATIC ROUTES (Defined First)
+// ==========================================
 
-// @desc    Search products by name
+// Public routes
+router.get('/market', getMarketProducts);
 router.get('/search', searchProducts);
 
-// @desc    Get single product details by ID
-router.get('/:id', getProductById);
-
-// @desc    Upload new crop with image
+// Private farmer routes
 router.post('/upload', protect, upload.single('image'), createProduct);
+router.get('/farmer', protect, getFarmerProducts); // This fixes the Stocks page error
 
-// @desc    Get all products belonging to the logged-in farmer
-router.get('/farmer', protect, getFarmerProducts);
+// ==========================================
+//   DYNAMIC ROUTES (Defined Last)
+// ==========================================
 
-// @desc    Update specific product details
+router.get('/:id', getProductById);
 router.put('/:id', protect, updateProduct);
-
-// @desc    Delete a product from inventory
 router.delete('/:id', protect, deleteProduct);
 
 module.exports = router;

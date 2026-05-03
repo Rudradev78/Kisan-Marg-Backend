@@ -15,16 +15,26 @@ const {
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/authMiddleware');
 
-router.post('/', protect, createOrder);
+// ==========================================
+//   STATIC ROUTES (Defined First)
+// ==========================================
+
+router.get('/farmer/history', protect, getFarmerHistory); // Sub-route first
 router.get('/farmer', protect, getFarmerOrders);
-router.put('/:id/status', protect, updateOrderStatus);
-router.delete('/:id', protect, deleteOrder);
-router.get('/farmer/history', protect, getFarmerHistory);
 router.get('/buyer', protect, getBuyerOrders);
+
+router.post('/', protect, createOrder);
 router.post('/razorpay', protect, createRazorpayOrder);
 router.post('/verify', protect, verifyPayment);
 router.post('/bulk-cod', protect, createBulkCOD); 
-router.put('/:id/review', protect, submitReview);
+
+// ==========================================
+//   DYNAMIC ROUTES (Defined Last)
+// ==========================================
+
 router.get('/:id', protect, getOrderById);
+router.put('/:id/status', protect, updateOrderStatus);
+router.put('/:id/review', protect, submitReview);
+router.delete('/:id', protect, deleteOrder);
 
 module.exports = router;
