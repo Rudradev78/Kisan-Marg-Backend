@@ -3,7 +3,7 @@ const User = require("../models/User");
 const { uploadToCloudinary } = require('../utils/cloudinaryHelper');
 const sendInternalNotification = require("../utils/notificationHelper");
 
-// @desc    Create Alert & Broadcast to App Popups
+// @desc    Create Alert & Broadcast using userType
 // @route   POST /api/v1/alerts
 exports.createAlert = async (req, res) => {
   try {
@@ -22,35 +22,25 @@ exports.createAlert = async (req, res) => {
       image: imageUrl 
     });
 
-    // 1. BROADCAST LOGIC: Force Case-Insensitive Search
-    let userQuery = {};
+    // --- BROADCAST LOGIC (Corrected to userType) ---
+    let userFilter = {};
 
     if (userType === 'Farmer') {
-      // Finds 'farmer', 'Farmer', 'FARMER'
-      userQuery = { role: { $regex: /^farmer$/i } }; 
+      // Matches 'Farmer' in your DB (Case-insensitive regex is safer for demos)
+      userFilter = { userType: { $regex: /^farmer$/i } }; 
     } else if (userType === 'Buyer') {
-      // Finds 'buyer', 'Buyer', 'BUYER'
-      userQuery = { role: { $regex: /^buyer$/i } };
+      // Matches 'Buyer' in your DB
+      userFilter = { userType: { $regex: /^buyer$/i } };
     } else {
-      // 'Both' -> Find everyone who is NOT an admin (case-insensitive)
-      userQuery = { role: { $not: { $regex: /^admin$/i } } };
+      // 'Both' -> Find everyone who is either a Farmer or Buyer
+      userFilter = { userType: { $in: ['Farmer', 'Buyer'] } };
     }
 
-    const users = await User.find(userQuery).select('_id role');
+    const users = await User.find(userFilter).select('_id');
 
-    // 🔴 DIAGNOSTIC LOG: This will solve the mystery
     console.log(`--- ALERT BROADCAST ATTEMPT ---`);
-    console.log(`Admin sent for Target: ${userType}`);
-    console.log(`Users Found matching query: ${users.length}`);
+    console.log(`Target: ${userType} | Users Found: ${users.length}`);
 
-    if (users.length === 0) {
-      // If we find 0, let's look at what roles actually EXIST in your DB
-      const allRoles = await User.distinct('role');
-      console.log(`⚠️ ERROR: No users found. Roles currently in your DB are: [${allRoles.join(', ')}]`);
-      console.log(`Make sure your Buyer account has one of these roles!`);
-    }
-
-    // 2. Create Notifications only if users were found
     if (users.length > 0) {
       const notificationPromises = users.map(user => 
         sendInternalNotification(
@@ -61,7 +51,11 @@ exports.createAlert = async (req, res) => {
         )
       );
       await Promise.all(notificationPromises);
-      console.log(`✅ Success: ${users.length} notifications created.`);
+      console.log(`✅ Successfully created ${users.length} notifications in DB.`);
+    } else {
+      // Debugging check to see what's actually in the collection
+      const sample = await User.findOne().select('userType');
+      console.log(`❌ No users found. Sample DB entry userType: ${sample ? sample.userType : 'No Users Exist'}`);
     }
 
     res.status(201).json({ success: true, data: alert });
@@ -71,15 +65,17 @@ exports.createAlert = async (req, res) => {
   }
 };
 
-// Get All Alerts
+// @desc    Get All Alerts (Filtered for Tabs)
 exports.getAllAlerts = async (req, res) => {
   try {
     const { type } = req.query;
     let query = {};
-    // If a Farmer/Buyer asks for alerts, they should see their specific type AND 'Both'
+    
+    // Ensures a Farmer sees 'Farmer' alerts AND 'Both' alerts
     if (type && type !== 'All' && type !== 'Both') {
       query = { userType: { $in: [type, 'Both'] } };
     }
+    
     const alerts = await Alert.find(query).sort('-createdAt');
     res.status(200).json({ success: true, data: alerts });
   } catch (error) {
@@ -87,7 +83,7 @@ exports.getAllAlerts = async (req, res) => {
   }
 };
 
-// Delete Alert
+// @desc    Delete Alert
 exports.deleteAlert = async (req, res) => {
   try {
     await Alert.findByIdAndDelete(req.params.id);
