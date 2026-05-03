@@ -3,20 +3,20 @@ const User = require("../models/User");
 const { uploadToCloudinary } = require('../utils/cloudinaryHelper');
 const sendInternalNotification = require("../utils/notificationHelper");
 
-// @desc    Create Alert & Broadcast to App Popups
+// @desc    Create Alert & Broadcast to Notifications
 // @route   POST /api/v1/alerts
 exports.createAlert = async (req, res) => {
   try {
     const { heading, description, userType } = req.body;
     let imageUrl = "";
     
-    // 1. Upload image to Cloudinary if it exists
+    // 1. Handle Image Upload
     if (req.file) {
       const result = await uploadToCloudinary(req.file.buffer, "kisan_marg_alerts");
       imageUrl = result.secure_url;
     }
 
-    // 2. Save the Alert record (for the Alerts Tab)
+    // 2. Save the Alert (This makes it show up in the "Alerts Tab")
     const alert = await Alert.create({ 
       heading, 
       description, 
@@ -24,36 +24,44 @@ exports.createAlert = async (req, res) => {
       image: imageUrl 
     });
 
-    // 3. BROADCAST LOGIC: Find targeted users
-    // We use a Case-Insensitive regex to ensure "Farmer" matches "farmer"
+    // 3. BROADCAST LOGIC: Normalize the input to avoid casing bugs
     let userQuery = {};
-    if (userType === 'Farmer') {
+    const normalizedTarget = userType ? userType.toLowerCase() : 'both';
+
+    if (normalizedTarget === 'farmer') {
+      // Finds 'farmer', 'Farmer', 'FARMER', etc.
       userQuery = { role: { $regex: /^farmer$/i } }; 
-    } else if (userType === 'Buyer') {
+    } else if (normalizedTarget === 'buyer') {
       userQuery = { role: { $regex: /^buyer$/i } };
-    } else if (userType === 'Both') {
-      // Find everyone who is either a farmer or a buyer
-      userQuery = { role: { $in: [/^farmer$/i, /^buyer$/i] } };
+    } else {
+      // If 'Both' or 'All', find everyone who isn't an admin
+      userQuery = { role: { $ne: 'admin' } };
     }
 
+    // 4. Find the Users
     const users = await User.find(userQuery).select('_id');
 
-    // DEBUG LOG: Check your terminal! If this says 0, your roles don't match.
-    console.log(`--- ALERT BROADCAST ---`);
-    console.log(`Target: ${userType} | Users Found: ${users.length}`);
+    // 🔴 CRITICAL LOGS: Check your terminal when you send the alert!
+    console.log(`--- BROADCAST ATTEMPT ---`);
+    console.log(`Targeting: ${userType} (Normalized: ${normalizedTarget})`);
+    console.log(`Users matching this role in DB: ${users.length}`);
 
-    // 4. Create a Notification entry for every user found
-    // This is what the Mobile App "polls" for every 10 seconds
-    const notificationPromises = users.map(user => 
-      sendInternalNotification(
-        user._id,
-        `📢 ${heading}`,
-        description,
-        "AdminAlert"
-      )
-    );
-
-    await Promise.all(notificationPromises);
+    // 5. Create the Notification Trigger for each user found
+    // This is what makes the popup slide down in the app
+    if (users.length > 0) {
+      const notificationPromises = users.map(user => 
+        sendInternalNotification(
+          user._id,
+          `📢 ${heading}`,
+          description,
+          "AdminAlert"
+        )
+      );
+      await Promise.all(notificationPromises);
+      console.log(`✅ ${users.length} Notifications successfully created.`);
+    } else {
+      console.log(`⚠️ No users found matching the role "${userType}".`);
+    }
 
     res.status(201).json({ success: true, data: alert });
   } catch (error) {
