@@ -42,19 +42,31 @@ exports.verifyPayment = async (req, res) => {
       .digest("hex");
 
     if (razorpay_signature === expectedSign) {
-      const orderPromises = cartItems.map(item => {
-        return Order.create({
-          farmerId: item.farmerId._id || item.farmerId, // Handle both object and ID
-          buyerId: req.user.id,
-          product: item._id,
-          quantity: item.qty,
-          totalPrice: (item.pricePerUnit * item.qty),
-          deliveryFee: 20 / cartItems.length,
-          transactionId: razorpay_payment_id,
-          status: 'Requested'
-        });
-      });
+    const orderPromises = cartItems.map((item, index) => {
+      // 1. LOG: See exactly what the backend receives for each item
+      console.log(`Checking item ${index}: ${item.productName}`);
+      console.log("Full Item Data:", JSON.stringify(item));
 
+      // 2. SAFE FETCH: Handle both cases (farmerId as a string or as an object)
+      // If the Home page used .populate, it's an object. If not, it's a string.
+      const fId = item.farmerId?._id || item.farmerId;
+
+      // 3. VALIDATION: If fId is still missing, we stop and send a clear error
+      if (!fId) {
+        throw new Error(`Product "${item.productName}" is missing the farmerId! Please clear your kart and try again.`);
+      }
+
+      return Order.create({
+        farmerId: fId, // Correctly assigns the string ID
+        buyerId: req.user.id,
+        product: item._id,
+        quantity: item.qty,
+        totalPrice: (item.pricePerUnit * item.qty),
+        deliveryFee: 20 / cartItems.length,
+        transactionId: razorpay_payment_id || "COD",
+        status: 'Requested'
+      });
+    });
       await Promise.all(orderPromises);
       return res.status(200).json({ success: true, message: "Orders Created" });
     } else {
@@ -73,15 +85,28 @@ exports.createBulkCOD = async (req, res) => {
   try {
     const { cartItems } = req.body;
 
-    const orderPromises = cartItems.map(item => {
+    const orderPromises = cartItems.map((item, index) => {
+      // 1. LOG: See exactly what the backend receives for each item
+      console.log(`Checking item ${index}: ${item.productName}`);
+      console.log("Full Item Data:", JSON.stringify(item));
+
+      // 2. SAFE FETCH: Handle both cases (farmerId as a string or as an object)
+      // If the Home page used .populate, it's an object. If not, it's a string.
+      const fId = item.farmerId?._id || item.farmerId;
+
+      // 3. VALIDATION: If fId is still missing, we stop and send a clear error
+      if (!fId) {
+        throw new Error(`Product "${item.productName}" is missing the farmerId! Please clear your kart and try again.`);
+      }
+
       return Order.create({
-        farmerId: item.farmerId._id,
+        farmerId: fId, // Correctly assigns the string ID
         buyerId: req.user.id,
         product: item._id,
         quantity: item.qty,
         totalPrice: (item.pricePerUnit * item.qty),
         deliveryFee: 20 / cartItems.length,
-        transactionId: "COD",
+        transactionId: razorpay_payment_id || "COD",
         status: 'Requested'
       });
     });
