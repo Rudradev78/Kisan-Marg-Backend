@@ -3,20 +3,18 @@ const User = require("../models/User");
 const { uploadToCloudinary } = require('../utils/cloudinaryHelper');
 const sendInternalNotification = require("../utils/notificationHelper");
 
-// @desc    Create Alert & Broadcast to Notifications
+// @desc    Create Alert & Broadcast to App Popups
 // @route   POST /api/v1/alerts
 exports.createAlert = async (req, res) => {
   try {
     const { heading, description, userType } = req.body;
     let imageUrl = "";
     
-    // 1. Handle Image Upload
     if (req.file) {
       const result = await uploadToCloudinary(req.file.buffer, "kisan_marg_alerts");
       imageUrl = result.secure_url;
     }
 
-    // 2. Save the Alert (This makes it show up in the "Alerts Tab")
     const alert = await Alert.create({ 
       heading, 
       description, 
@@ -24,30 +22,35 @@ exports.createAlert = async (req, res) => {
       image: imageUrl 
     });
 
-    // 3. BROADCAST LOGIC: Normalize the input to avoid casing bugs
+    // 1. BROADCAST LOGIC: Force Case-Insensitive Search
     let userQuery = {};
-    const normalizedTarget = userType ? userType.toLowerCase() : 'both';
 
-    if (normalizedTarget === 'farmer') {
-      // Finds 'farmer', 'Farmer', 'FARMER', etc.
+    if (userType === 'Farmer') {
+      // Finds 'farmer', 'Farmer', 'FARMER'
       userQuery = { role: { $regex: /^farmer$/i } }; 
-    } else if (normalizedTarget === 'buyer') {
+    } else if (userType === 'Buyer') {
+      // Finds 'buyer', 'Buyer', 'BUYER'
       userQuery = { role: { $regex: /^buyer$/i } };
     } else {
-      // If 'Both' or 'All', find everyone who isn't an admin
-      userQuery = { role: { $ne: 'admin' } };
+      // 'Both' -> Find everyone who is NOT an admin (case-insensitive)
+      userQuery = { role: { $not: { $regex: /^admin$/i } } };
     }
 
-    // 4. Find the Users
-    const users = await User.find(userQuery).select('_id');
+    const users = await User.find(userQuery).select('_id role');
 
-    // 🔴 CRITICAL LOGS: Check your terminal when you send the alert!
-    console.log(`--- BROADCAST ATTEMPT ---`);
-    console.log(`Targeting: ${userType} (Normalized: ${normalizedTarget})`);
-    console.log(`Users matching this role in DB: ${users.length}`);
+    // 🔴 DIAGNOSTIC LOG: This will solve the mystery
+    console.log(`--- ALERT BROADCAST ATTEMPT ---`);
+    console.log(`Admin sent for Target: ${userType}`);
+    console.log(`Users Found matching query: ${users.length}`);
 
-    // 5. Create the Notification Trigger for each user found
-    // This is what makes the popup slide down in the app
+    if (users.length === 0) {
+      // If we find 0, let's look at what roles actually EXIST in your DB
+      const allRoles = await User.distinct('role');
+      console.log(`⚠️ ERROR: No users found. Roles currently in your DB are: [${allRoles.join(', ')}]`);
+      console.log(`Make sure your Buyer account has one of these roles!`);
+    }
+
+    // 2. Create Notifications only if users were found
     if (users.length > 0) {
       const notificationPromises = users.map(user => 
         sendInternalNotification(
@@ -58,9 +61,7 @@ exports.createAlert = async (req, res) => {
         )
       );
       await Promise.all(notificationPromises);
-      console.log(`✅ ${users.length} Notifications successfully created.`);
-    } else {
-      console.log(`⚠️ No users found matching the role "${userType}".`);
+      console.log(`✅ Success: ${users.length} notifications created.`);
     }
 
     res.status(201).json({ success: true, data: alert });
@@ -70,18 +71,15 @@ exports.createAlert = async (req, res) => {
   }
 };
 
-// @desc    Get All Alerts (Public/Filtered)
-// @route   GET /api/v1/alerts
+// Get All Alerts
 exports.getAllAlerts = async (req, res) => {
   try {
     const { type } = req.query;
     let query = {};
-
-    // If type is 'Farmer', we show alerts meant for 'Farmer' OR 'Both'
-    if (type && type !== 'All') {
+    // If a Farmer/Buyer asks for alerts, they should see their specific type AND 'Both'
+    if (type && type !== 'All' && type !== 'Both') {
       query = { userType: { $in: [type, 'Both'] } };
     }
-
     const alerts = await Alert.find(query).sort('-createdAt');
     res.status(200).json({ success: true, data: alerts });
   } catch (error) {
@@ -89,8 +87,7 @@ exports.getAllAlerts = async (req, res) => {
   }
 };
 
-// @desc    Delete Alert
-// @route   DELETE /api/v1/alerts/:id
+// Delete Alert
 exports.deleteAlert = async (req, res) => {
   try {
     await Alert.findByIdAndDelete(req.params.id);
