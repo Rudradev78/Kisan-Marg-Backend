@@ -10,7 +10,8 @@ const {
   createRazorpayOrder,
   verifyPayment,
   createBulkCOD,
-  submitReview
+  submitReview,
+  getOrderById
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -24,5 +25,6 @@ router.post('/razorpay', protect, createRazorpayOrder);
 router.post('/verify', protect, verifyPayment);
 router.post('/bulk-cod', protect, createBulkCOD); 
 router.put('/:id/review', protect, submitReview);
+router.get('/:id', protect, getOrderById);
 
 module.exports = router;

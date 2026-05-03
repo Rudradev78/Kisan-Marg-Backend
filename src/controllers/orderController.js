@@ -283,3 +283,23 @@ exports.submitReview = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// @desc    Get Single Order Details
+// @route   GET /api/v1/orders/:id
+exports.getOrderById = async (req, res) => {
+  try {
+    // 🟢 CRITICAL: You must populate 'buyerId' to get the name and phone
+    const order = await Order.findById(req.params.id)
+      .populate('buyerId', 'name phno') 
+      .populate('farmerId', 'farmName location')
+      .populate('product', 'productName productImageURL unitGiven');
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    res.status(200).json({ success: true, data: order });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
