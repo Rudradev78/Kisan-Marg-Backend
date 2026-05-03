@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const User = require('../models/User'); 
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
@@ -31,35 +32,37 @@ exports.verifyPayment = async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, cartItems } = req.body;
 
-    // 1. Verify Signature
+    // Log for debugging
+    console.log("Verifying Payment for Order:", razorpay_order_id);
+
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(sign.toString())
       .digest("hex");
 
-    if (razorpay_signature !== expectedSign) {
+    if (razorpay_signature === expectedSign) {
+      const orderPromises = cartItems.map(item => {
+        return Order.create({
+          farmerId: item.farmerId._id || item.farmerId, // Handle both object and ID
+          buyerId: req.user.id,
+          product: item._id,
+          quantity: item.qty,
+          totalPrice: (item.pricePerUnit * item.qty),
+          deliveryFee: 20 / cartItems.length,
+          transactionId: razorpay_payment_id,
+          status: 'Requested'
+        });
+      });
+
+      await Promise.all(orderPromises);
+      return res.status(200).json({ success: true, message: "Orders Created" });
+    } else {
+      console.log("Signature Mismatch!");
       return res.status(400).json({ success: false, message: "Invalid Signature" });
     }
-
-    // 2. Loop through cart items and create separate orders
-    const orderPromises = cartItems.map(item => {
-      return Order.create({
-        farmerId: item.farmerId._id,
-        buyerId: req.user.id,
-        product: item._id,
-        quantity: item.qty,
-        totalPrice: (item.pricePerUnit * item.qty),
-        deliveryFee: 20 / cartItems.length, // Split delivery fee among farmers
-        transactionId: razorpay_payment_id,
-        status: 'Requested'
-      });
-    });
-
-    const orders = await Promise.all(orderPromises);
-
-    res.status(200).json({ success: true, message: "Orders Created", data: orders });
   } catch (error) {
+    console.error("Verify Error:", error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };
