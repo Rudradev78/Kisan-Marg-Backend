@@ -269,3 +269,17 @@ exports.getBuyerOrders = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.submitReview = async (req, res) => {
+  try {
+    const { rating, review } = req.body;
+    const order = await Order.findByIdAndUpdate(
+      req.params.id,
+      { rating, review },
+      { new: true }
+    );
+    res.status(200).json({ success: true, data: order });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
