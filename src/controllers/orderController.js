@@ -3,6 +3,7 @@ const Product = require('../models/Product');
 const User = require('../models/User'); 
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const sendInternalNotification = require('../utils/notificationHelper');
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -32,9 +33,6 @@ exports.verifyPayment = async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, cartItems } = req.body;
 
-    // Log for debugging
-    console.log("Verifying Payment for Order:", razorpay_order_id);
-
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
@@ -42,39 +40,41 @@ exports.verifyPayment = async (req, res) => {
       .digest("hex");
 
     if (razorpay_signature === expectedSign) {
-    const orderPromises = cartItems.map((item, index) => {
-      // 1. LOG: See exactly what the backend receives for each item
-      console.log(`Checking item ${index}: ${item.productName}`);
-      console.log("Full Item Data:", JSON.stringify(item));
+      const orderPromises = cartItems.map(async (item) => {
+        const fId = item.farmerId?._id || item.farmerId;
 
-      // 2. SAFE FETCH: Handle both cases (farmerId as a string or as an object)
-      // If the Home page used .populate, it's an object. If not, it's a string.
-      const fId = item.farmerId?._id || item.farmerId;
+        if (!fId) {
+          throw new Error(`Product "${item.productName}" is missing the farmerId!`);
+        }
 
-      // 3. VALIDATION: If fId is still missing, we stop and send a clear error
-      if (!fId) {
-        throw new Error(`Product "${item.productName}" is missing the farmerId! Please clear your kart and try again.`);
-      }
+        const newOrder = await Order.create({
+          farmerId: fId,
+          buyerId: req.user.id,
+          product: item._id,
+          quantity: item.qty,
+          totalPrice: (item.pricePerUnit * item.qty),
+          deliveryFee: 20 / cartItems.length,
+          transactionId: razorpay_payment_id,
+          status: 'Requested'
+        });
 
-      return Order.create({
-        farmerId: fId, // Correctly assigns the string ID
-        buyerId: req.user.id,
-        product: item._id,
-        quantity: item.qty,
-        totalPrice: (item.pricePerUnit * item.qty),
-        deliveryFee: 20 / cartItems.length,
-        transactionId: razorpay_payment_id,
-        status: 'Requested'
+        // 1st Notification - Notify Farmer about New Razorpay Order
+        await sendInternalNotification(
+          fId,
+          "New Order Received! 🌾",
+          `You have a new paid order for ${item.productName} (${item.qty}kg).`,
+          "NewOrder"
+        );
+
+        return newOrder;
       });
-    });
+
       await Promise.all(orderPromises);
       return res.status(200).json({ success: true, message: "Orders Created" });
     } else {
-      console.log("Signature Mismatch!");
       return res.status(400).json({ success: false, message: "Invalid Signature" });
     }
   } catch (error) {
-    console.error("Verify Error:", error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -85,30 +85,33 @@ exports.createBulkCOD = async (req, res) => {
   try {
     const { cartItems } = req.body;
 
-    const orderPromises = cartItems.map((item, index) => {
-      // 1. LOG: See exactly what the backend receives for each item
-      console.log(`Checking item ${index}: ${item.productName}`);
-      console.log("Full Item Data:", JSON.stringify(item));
-
-      // 2. SAFE FETCH: Handle both cases (farmerId as a string or as an object)
-      // If the Home page used .populate, it's an object. If not, it's a string.
+    const orderPromises = cartItems.map(async (item) => {
       const fId = item.farmerId?._id || item.farmerId;
 
-      // 3. VALIDATION: If fId is still missing, we stop and send a clear error
       if (!fId) {
-        throw new Error(`Product "${item.productName}" is missing the farmerId! Please clear your kart and try again.`);
+        throw new Error(`Product "${item.productName}" is missing the farmerId!`);
       }
 
-      return Order.create({
-        farmerId: fId, // Correctly assigns the string ID
+      const newOrder = await Order.create({
+        farmerId: fId,
         buyerId: req.user.id,
         product: item._id,
         quantity: item.qty,
         totalPrice: (item.pricePerUnit * item.qty),
         deliveryFee: 20 / cartItems.length,
-        transactionId:"COD",
+        transactionId: "COD",
         status: 'Requested'
       });
+
+      // 1st Notification - Notify Farmer about New COD Order
+      await sendInternalNotification(
+        fId,
+        "New COD Order! 🚚",
+        `You have a new Cash on Delivery order for ${item.productName}.`,
+        "NewOrder"
+      );
+
+      return newOrder;
     });
 
     await Promise.all(orderPromises);
@@ -118,23 +121,15 @@ exports.createBulkCOD = async (req, res) => {
   }
 };
 
-// @desc    Create new order (Buyer Action)
-// @route   POST /api/v1/orders
+// @desc    Create new order (Standard Single Order)
 exports.createOrder = async (req, res) => {
   try {
-    const { 
-      productId, 
-      quantity, 
-      discount, 
-      deliveryFee, 
-      handlingCharge 
-    } = req.body;
+    const { productId, quantity, deliveryFee, handlingCharge } = req.body;
 
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ success: false, message: "Product not found" });
 
-    // Calculate Total Price
-    const totalPrice = (product.pricePerUnit * quantity) + (deliveryFee || 0) + (handlingCharge || 0) - (discount || 0);
+    const totalPrice = (product.pricePerUnit * quantity) + (deliveryFee || 0) + (handlingCharge || 0);
 
     const order = await Order.create({
       buyerId: req.user.id,
@@ -144,9 +139,16 @@ exports.createOrder = async (req, res) => {
       totalPrice,
       deliveryFee,
       handlingCharge,
-      discount,
       status: 'Requested'
     });
+
+    // 1st Notification - Notify Farmer
+    await sendInternalNotification(
+      product.farmerId, 
+      "New Order Received! 🌾", 
+      `You have a new order for ${product.productName}. Check your Requests tab!`,
+      "NewOrder"
+    );
 
     res.status(201).json({ success: true, data: order });
   } catch (error) {
@@ -155,31 +157,35 @@ exports.createOrder = async (req, res) => {
 };
 
 // @desc    Update Order Status (Farmer Action)
-// @route   PUT /api/v1/orders/:id/status
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body; 
-    const order = await Order.findById(req.params.id);
+    // We populate 'product' to get the name for the notification message
+    const order = await Order.findById(req.params.id).populate('product');
 
-    // If order is finished, credit the farmer's account
     if (status === 'Completed' && order.status !== 'Completed') {
       const farmer = await User.findById(order.farmerId);
-      
-      // Calculate amount (Price * Qty)
-      const creditAmount = order.totalPrice; 
-      
-      farmer.balance += creditAmount;
+      farmer.balance += order.totalPrice;
       await farmer.save();
     }
 
     order.status = status;
     await order.save();
+
+    // 2nd Notification - Notify Buyer about Status Change
+    await sendInternalNotification(
+      order.buyerId, 
+      "Order Update 📦", 
+      `Your order for ${order.product.productName} is now ${status}.`,
+      "OrderUpdate"
+    );
     
     res.status(200).json({ success: true, data: order });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // @desc    Deny Order (Farmer Action - Deletes from DB as requested)
 // @route   DELETE /api/v1/orders/:id
