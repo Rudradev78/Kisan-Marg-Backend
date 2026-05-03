@@ -17,6 +17,7 @@ const UserSchema = new mongoose.Schema({
   experience: { type: String, default: "0" },
   totalSales: { type: Number, default: 0 },
   transactionModes: [String], 
+  balance: { type: Number, default: 0 },
   stockId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' }, 
   locationCoords: {
     latitude: { type: Number, default: 20.2961 },

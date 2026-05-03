@@ -25,31 +25,66 @@ exports.createRazorpayOrder = async (req, res) => {
   }
 };
 
-// @desc    Verify Signature and Save Order to DB
+// @desc    Verify Payment and Split into Multiple Orders
 // @route   POST /api/v1/orders/verify
 exports.verifyPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderData } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, cartItems } = req.body;
 
+    // 1. Verify Signature
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(sign.toString())
       .digest("hex");
 
-    if (razorpay_signature === expectedSign) {
-      // Payment Verified! Now create the actual Order in MongoDB
-      const newOrder = await Order.create({
-        ...orderData,
+    if (razorpay_signature !== expectedSign) {
+      return res.status(400).json({ success: false, message: "Invalid Signature" });
+    }
+
+    // 2. Loop through cart items and create separate orders
+    const orderPromises = cartItems.map(item => {
+      return Order.create({
+        farmerId: item.farmerId._id,
         buyerId: req.user.id,
+        product: item._id,
+        quantity: item.qty,
+        totalPrice: (item.pricePerUnit * item.qty),
+        deliveryFee: 20 / cartItems.length, // Split delivery fee among farmers
         transactionId: razorpay_payment_id,
         status: 'Requested'
       });
+    });
 
-      res.status(200).json({ success: true, message: "Payment Verified", data: newOrder });
-    } else {
-      res.status(400).json({ success: false, message: "Invalid Signature" });
-    }
+    const orders = await Promise.all(orderPromises);
+
+    res.status(200).json({ success: true, message: "Orders Created", data: orders });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create Bulk COD Orders
+// @route   POST /api/v1/orders/bulk-cod
+exports.createBulkCOD = async (req, res) => {
+  try {
+    const { cartItems } = req.body;
+
+    const orderPromises = cartItems.map(item => {
+      return Order.create({
+        farmerId: item.farmerId._id,
+        buyerId: req.user.id,
+        product: item._id,
+        quantity: item.qty,
+        totalPrice: (item.pricePerUnit * item.qty),
+        deliveryFee: 20 / cartItems.length,
+        transactionId: "COD",
+        status: 'Requested'
+      });
+    });
+
+    await Promise.all(orderPromises);
+    res.status(201).json({ success: true, message: "COD Orders Placed" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -96,25 +131,23 @@ exports.createOrder = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body; 
-    // Possible: Requested, Accepted, Packed, Out for Delivery, Completed, Cancelled
-    
     const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
-    // Authorization: Only the farmer assigned to this order can update it
-    if (order.farmerId.toString() !== req.user.id) {
-      return res.status(401).json({ success: false, message: "Not authorized to update this order" });
+    // If order is finished, credit the farmer's account
+    if (status === 'Completed' && order.status !== 'Completed') {
+      const farmer = await User.findById(order.farmerId);
+      
+      // Calculate amount (Price * Qty)
+      const creditAmount = order.totalPrice; 
+      
+      farmer.balance += creditAmount;
+      await farmer.save();
     }
 
     order.status = status;
-    
-    // If completed, check if transaction ID is provided
-    if (status === 'Completed' && req.body.transactionId) {
-      order.transactionId = req.body.transactionId;
-    }
-
     await order.save();
-    res.status(200).json({ success: true, message: `Order marked as ${status}`, data: order });
+    
+    res.status(200).json({ success: true, data: order });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

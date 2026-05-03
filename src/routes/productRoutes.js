@@ -21,10 +21,6 @@ const {
 
 const { protect } = require('../middleware/authMiddleware');
 
-// ==========================================
-//   PUBLIC / BUYER ROUTES (No Login Required)
-// ==========================================
-
 // @desc    Get top 10 products for the Home Page
 router.get('/market', getMarketProducts);
 
@@ -34,13 +30,7 @@ router.get('/search', searchProducts);
 // @desc    Get single product details by ID
 router.get('/:id', getProductById);
 
-
-// ==========================================
-//   PRIVATE / FARMER ROUTES (Protected)
-// ==========================================
-
 // @desc    Upload new crop with image
-// Uses the internal 'upload' variable defined above
 router.post('/upload', protect, upload.single('image'), createProduct);
 
 // @desc    Get all products belonging to the logged-in farmer
