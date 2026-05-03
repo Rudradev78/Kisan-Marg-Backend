@@ -37,7 +37,6 @@ exports.createProduct = async (req, res) => {
 
 // @desc    Get Market Prices (Top 10 products for Buyer/Public Home)
 // @route   GET /api/v1/products/market
-// Update your getMarketProducts to this:
 exports.getMarketProducts = async (req, res) => {
   try {
     const products = await Product.find()

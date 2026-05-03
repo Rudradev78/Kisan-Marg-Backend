@@ -63,7 +63,7 @@ exports.verifyPayment = async (req, res) => {
         quantity: item.qty,
         totalPrice: (item.pricePerUnit * item.qty),
         deliveryFee: 20 / cartItems.length,
-        transactionId: razorpay_payment_id || "COD",
+        transactionId: razorpay_payment_id,
         status: 'Requested'
       });
     });
@@ -106,7 +106,7 @@ exports.createBulkCOD = async (req, res) => {
         quantity: item.qty,
         totalPrice: (item.pricePerUnit * item.qty),
         deliveryFee: 20 / cartItems.length,
-        transactionId: razorpay_payment_id || "COD",
+        transactionId:"COD",
         status: 'Requested'
       });
     });
