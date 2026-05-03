@@ -309,3 +309,24 @@ exports.getOrderById = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// @desc    Get ongoing orders for the logged-in user
+// @route   GET /api/v1/orders/ongoing
+exports.getOngoingOrders = async (req, res) => {
+  try {
+    // Find orders for this user that are NOT Completed or Cancelled
+    const ongoingStatus = ['Requested', 'Accepted', 'Packed', 'Out for Delivery'];
+    
+    const query = req.user.role === 'farmer' 
+      ? { farmerId: req.user.id, status: { $in: ongoingStatus } }
+      : { buyerId: req.user.id, status: { $in: ongoingStatus } };
+
+    const orders = await Order.find(query)
+      .populate('product')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, count: orders.length, data: orders });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

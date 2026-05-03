@@ -7,6 +7,7 @@ const {
   getFarmerOrders,
   getFarmerHistory,
   getBuyerOrders,
+  getOngoingOrders, // 🟢 Added this import
   createRazorpayOrder,
   verifyPayment,
   createBulkCOD,
@@ -19,7 +20,8 @@ const { protect } = require('../middleware/authMiddleware');
 //   STATIC ROUTES (Defined First)
 // ==========================================
 
-router.get('/farmer/history', protect, getFarmerHistory); // Sub-route first
+router.get('/farmer/history', protect, getFarmerHistory); 
+router.get('/ongoing', protect, getOngoingOrders); // 🟢 ADDED: Fixes the "ongoing" casting error
 router.get('/farmer', protect, getFarmerOrders);
 router.get('/buyer', protect, getBuyerOrders);
 
