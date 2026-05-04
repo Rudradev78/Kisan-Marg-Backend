@@ -7,6 +7,6 @@ const { protect } = require('../middleware/authMiddleware');
 router.post('/login', adminLogin);
 
 // Protected Dashboard Stats
-router.get('/dashboard', protect, getDashboardStats);
+router.get('/dashboard', getDashboardStats);
 
 module.exports = router;
