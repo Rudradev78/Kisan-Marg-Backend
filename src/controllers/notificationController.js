@@ -28,7 +28,7 @@ exports.getNotifications = async (req, res) => {
 // @access  Private
 exports.markAsRead = async (req, res) => {
   try {
-    let notification = await Notification.findById(req.params.id);
+    const notification = await Notification.findById(req.params.id);
 
     if (!notification) {
       return res.status(404).json({
@@ -37,8 +37,12 @@ exports.markAsRead = async (req, res) => {
       });
     }
 
-    // Ensure the notification belongs to the person trying to read it
-    if (notification.recipient.toString() !== req.user.id) {
+    /**
+     * 🟢 THE FIX: Use .equals() for reliable ObjectId comparison.
+     * req.user.id is an ObjectId from your middleware.
+     * notification.recipient is an ObjectId from the schema.
+     */
+    if (!notification.recipient.equals(req.user.id)) {
       return res.status(401).json({
         success: false,
         message: "Not authorized to update this notification"
