@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Order = require('../models/Order');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const { uploadToCloudinary } = require('../utils/cloudinaryHelper');
@@ -111,22 +112,31 @@ exports.verifyOTP = async (req, res) => {
 exports.getUserStats = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    // 🟢 CALCULATE REAL STATS
+    const allOrders = await Order.find({ farmerId: req.user.id });
+    
+    const ordersCount = allOrders.length;
+    const totalProfit = allOrders
+      .filter(o => o.status === 'Completed')
+      .reduce((sum, order) => sum + order.totalPrice, 0);
 
     res.status(200).json({
       success: true,
-      user, // <--- ADD THIS: Sends the full profile details (farmName, address, etc.)
+      user, 
       stats: {
-        orders: 0, 
+        orders: ordersCount, 
         rating: user.rating || 0.0,
-        profit: 0
+        profit: totalProfit
       }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
 // @desc    Update Farmer Profile
 // @route   PUT /api/v1/auth/profile
 exports.updateProfile = async (req, res) => {

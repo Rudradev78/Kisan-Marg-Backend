@@ -13,15 +13,25 @@ const protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Get user from the token (Exclude OTP for security)
-      req.user = await User.findById(decoded.id).select('-otp');
+      /**
+       * 🟢 THE FIX: 
+       * Attach the role from the token to req.user.
+       * This matches the 'role' we signed in verifyOTP (user.userType).
+       */
+      const user = await User.findById(decoded.id).select('-otp');
       
-      // If user no longer exists in DB
-      if (!req.user) {
+      if (!user) {
         return res.status(401).json({ success: false, message: 'User no longer exists' });
       }
 
-      return next(); // Use return here to stop execution of this function
+      // Attach user info and role to the request
+      req.user = {
+        id: user._id,
+        role: decoded.role, // This will be 'Farmer' or 'Buyer'
+        ...user._doc
+      };
+
+      return next(); 
     } catch (error) {
       console.error("Auth Middleware Error:", error.message);
       return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
