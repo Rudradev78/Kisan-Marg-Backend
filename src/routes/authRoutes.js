@@ -15,7 +15,8 @@ const {
   getUserStats, 
   updateProfile,
   toggleWishlist,
-  deleteAddress
+  deleteAddress,
+  getProfileById
 } = require('../controllers/authController');
 
 const { protect } = require('../middleware/authMiddleware');
@@ -41,5 +42,6 @@ router.post('/wishlist/:productId', protect, toggleWishlist);
 
 // Address Management
 router.delete('/address/:id', protect, deleteAddress);
+router.get('/profile/:id', getProfileById); // 🟢 Add this line
 
 module.exports = router;
