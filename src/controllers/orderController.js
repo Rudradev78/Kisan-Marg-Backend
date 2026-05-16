@@ -157,18 +157,44 @@ exports.createOrder = async (req, res) => {
 };
 
 // @desc    Update Order Status (Farmer Action)
+// @route   PUT /api/v1/orders/:id/status
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body; 
     // We populate 'product' to get the name for the notification message
     const order = await Order.findById(req.params.id).populate('product');
 
-    if (status === 'Completed' && order.status !== 'Completed') {
-      const farmer = await User.findById(order.farmerId);
-      farmer.balance += order.totalPrice;
-      await farmer.save();
+    // 🛡️ Safety Check: Ensure the order actually exists before reading its properties
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
     }
 
+    // When the order is transitioning to 'Completed' (Delivered)
+    if (status === 'Completed' && order.status !== 'Completed') {
+      
+      // 1. Update Farmer Balance
+      const farmer = await User.findById(order.farmerId);
+      if (farmer) {
+        farmer.balance += order.totalPrice;
+        await farmer.save();
+      }
+
+      // 2. 🟢 DEDUCT QUANTITY: Update product stock and metrics
+      if (order.product) {
+        const product = await Product.findById(order.product._id);
+        if (product) {
+          // Math.max guarantees the inventory level never drops below 0 accidentally
+          product.availableQuantity = Math.max(0, product.availableQuantity - order.quantity);
+          
+          // Increment the overall order metric counter for documentation accuracy
+          product.noOfOrders += 1; 
+          
+          await product.save();
+        }
+      }
+    }
+
+    // Save the new status down to the order record
     order.status = status;
     await order.save();
 
